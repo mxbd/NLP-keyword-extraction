@@ -1,0 +1,14 @@
+{
+    "input_folder": "PATH TO INPUT FOLDER",
+    "output_folder": "PATH TO OUTPUT FOLDER",
+    "ignore_words": ["abstract", "introduction", "conclusion", "references", "acknowledgments", "pp", "et", "al", "ibid", "op. cit.", "figure", "table", "appendix", "publication"],
+    "generate_outputs": {
+        "wordcloud": true,
+        "barplot": true,
+        "txt_file": true,
+        "analysis_log": true
+    },
+    "num_keywords_per_file": 20,
+    "num_keywords_total": 20,
+    "adjust_unigrams_based_on_bigrams": false
+}
