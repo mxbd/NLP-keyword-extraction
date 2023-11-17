@@ -53,18 +53,24 @@ def extract_keywords_from_pdf(pdf_path, num_keywords, ignore_words):
     top_unigrams = unigram_freq.most_common(num_keywords)
     top_bigrams = bigram_freq.most_common(num_keywords)
 
+    # Adjust unigram frequencies based on bigram occurrences
+    for bigram, freq in top_bigrams:
+        words = bigram
+        for word in words:
+            if word in unigram_freq:
+                unigram_freq[word] = max(0, unigram_freq[word] - freq)
 
-    return top_unigrams, top_bigrams, pages_used
+    # Get adjusted top unigrams after reduction
+    top_unigrams_adjusted = unigram_freq.most_common(num_keywords)
+
+    return top_unigrams_adjusted, top_bigrams, pages_used
 
 
 
 def process_files_in_folder(input_folder, num_keywords_per_file, num_keywords_total, ignore_words=None, adjust_unigrams=False):
-    """
-    Process all PDF files in a folder and accumulate their word frequencies for unigrams and bigrams.
-    Returns a dictionary with 'unigrams', 'bigrams', 'combined_keywords' and 'log' keys.
-    """
     cumulative_unigram_freq = Counter()
     cumulative_bigram_freq = Counter()
+    cumulative_combined_freq = Counter()
     analysis_log = {}
 
     for pdf_file in os.listdir(input_folder):
@@ -72,41 +78,39 @@ def process_files_in_folder(input_folder, num_keywords_per_file, num_keywords_to
             pdf_path = os.path.join(input_folder, pdf_file)
             unigrams, bigrams, pages_used = extract_keywords_from_pdf(pdf_path, num_keywords_per_file, ignore_words)
 
-            # here so frequency adjustment is specific to each document's context
             if adjust_unigrams:
+                # Adjust unigram frequencies based on bigram occurrences for the individual file
                 unigrams = adjust_unigram_frequencies(unigrams, bigrams)
 
+            # Combine adjusted unigrams and bigrams for the individual file
+            combined_keywords = dict(unigrams + bigrams)
+
+            # Accumulate data from each file
             cumulative_unigram_freq += Counter(dict(unigrams))
             cumulative_bigram_freq += Counter(dict(bigrams))
+            cumulative_combined_freq += Counter(combined_keywords)
             analysis_log[pdf_file] = pages_used
 
-    # Get the most common unigrams and bigrams across all texts
+    # Get the most common unigrams, bigrams, and combined keywords across all texts
     top_unigrams = cumulative_unigram_freq.most_common(num_keywords_total)
     top_bigrams = cumulative_bigram_freq.most_common(num_keywords_total)
-
-    # Combine them for the overall analysis
-    combined_keywords = top_unigrams + [(" ".join(pair), freq) for pair, freq in top_bigrams]
-    combined_keywords.sort(key=lambda x: x[1], reverse=True)
+    top_combined_keywords = cumulative_combined_freq.most_common(num_keywords_total)
 
     return {
         "unigrams": top_unigrams, 
         "bigrams": top_bigrams,
-        "combined_keywords": combined_keywords,
+        "combined_keywords": top_combined_keywords,
         "log": analysis_log
     }
 
 
 # Adjustment logic: sum of unigrams always = or > than sum of bigrams
-def adjust_unigram_frequencies(top_unigrams, top_bigrams):
+def adjust_unigram_frequencies(unigrams, bigrams):
     """
     Adjust the frequencies of unigrams based on the occurrence of corresponding bigrams.
-    
-    This function aims to correct the potential overcounting of unigrams in cases where they also
-    appear as part of bigrams.
     """
-    # Convert to dictionaries for easier manipulation
-    unigram_dict = dict(top_unigrams)
-    bigram_dict = dict([(" ".join(pair), freq) for pair, freq in top_bigrams])
+    unigram_dict = dict(unigrams)
+    bigram_dict = dict([(" ".join(pair), freq) for pair, freq in bigrams])
 
     # Adjust unigram frequencies based on bigram occurrences
     for bigram, freq in bigram_dict.items():
@@ -115,11 +119,8 @@ def adjust_unigram_frequencies(top_unigrams, top_bigrams):
             if word in unigram_dict:
                 unigram_dict[word] = max(0, unigram_dict[word] - freq)
 
-    # Combine adjusted unigrams and original bigrams, then sort
-    combined_keywords = list(unigram_dict.items()) + list(bigram_dict.items())
-    combined_keywords.sort(key=lambda x: x[1], reverse=True)
-
-    return combined_keywords
+    adjusted_unigrams = [(word, freq) for word, freq in unigram_dict.items() if freq > 0]
+    return adjusted_unigrams
 
 
 def filter_zero_frequency(keywords):
